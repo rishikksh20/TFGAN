@@ -1,2 +1,1 @@
-# TFGAN
-TFGAN: TIME AND FREQUENCY DOMAIN BASED GENERATIVE ADVERSARIAL NETWORK FOR HIGH-FIDELITY SPEECH SYNTHESIS
+# TFGAN : Time and Frequency Domain Based Generative Adversarial Network for High-fidelity Speech Synthesis
