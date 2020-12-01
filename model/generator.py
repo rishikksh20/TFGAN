@@ -7,9 +7,32 @@ from .res_stack import ResStack
 
 MAX_WAV_VALUE = 32768.0
 
+class Upsample(nn.Module):
+    def __init__(self, mult, r):
+        super(Upsample, self).__init__()
+        self.upsample = nn.Sequential(nn.Upsample(mode="nearest", scale_factor=r),
+                                      nn.LeakyReLU(0.2),
+                                      nn.ReflectionPad1d(3),
+                                      nn.utils.weight_norm(nn.Conv1d(mult*2, mult, kernel_size=7, stride=1))
+
+        )
+        self.trans_upsample = nn.Sequential(nn.LeakyReLU(0.2),
+                                            nn.utils.weight_norm(nn.ConvTranspose1d(mult*2, mult,
+                                            kernel_size=r*2, stride=r,
+                                            padding=r // 2 + r % 2,
+                                            output_padding=r % 2)
+                                    ))
+
+    def forward(self, x):
+        x = torch.sin(x) + x
+        out1 = self.upsample(x)
+        out2 = self.trans_upsample(x)
+        return out1 + out2
+
+
 
 class Generator(nn.Module):
-    def __init__(self, mel_channel, n_residual_layers, ratios=[8, 5, 5], mult = 256, out_band = 1):
+    def __init__(self, mel_channel, n_residual_layers, ratios=[8, 8, 4], mult = 256, out_band = 1):
         super(Generator, self).__init__()
         self.mel_channel = mel_channel
         
@@ -19,14 +42,7 @@ class Generator(nn.Module):
 
         # Upsample to raw audio scale
         for _, r in enumerate(ratios):
-            generator += [
-                nn.LeakyReLU(0.2),
-                nn.utils.weight_norm(nn.ConvTranspose1d(mult*2, mult, 
-                                    kernel_size=r*2, stride=r, 
-                                    padding=r // 2 + r % 2,
-                                    output_padding=r % 2)
-                                    ),
-            ]
+            generator += [ Upsample(mult, r)]
             for j in range(n_residual_layers):
                 generator += [ResStack(mult, dilation=3 ** j)]
 
