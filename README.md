@@ -1,6 +1,6 @@
-# TFGAN : Time and Frequency Domain Based Generative Adversarial Network for High-fidelity Speech Synthesis [WIP]
+# TFGAN [WIP]
 
-This repo implements of [TFGAN: Time and Frequency Domain Based Generative Adversarial Network for High-fidelity Speech Synthesis](https://arxiv.org/abs/2011.12206) using Pytorch.
+This repo is Unofficial implements of [TFGAN: Time and Frequency Domain Based Generative Adversarial Network for High-fidelity Speech Synthesis](https://arxiv.org/abs/2011.12206) using Pytorch.
 ![](./assets/model.PNG)
 
 ## Requirement
