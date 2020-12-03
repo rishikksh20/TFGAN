@@ -35,6 +35,7 @@ class TimeDomainLoss_v1(nn.Module):
             total_loss (Tensor): total loss of time domain
             
         """
+
         # Energy loss
         loss_e = torch.zeros(self.len).to(y)
         for i in range(self.len):

@@ -1,7 +1,7 @@
 data: # root path of train/validation data (either relative/absoulte path is ok)
-  train: '/workspace/LJSpeech-1.1/wavs'
-  validation: '/workspace/LJSpeech-1.1/valid'
-  mel_path: '/workspace/FastSpeech2/data/mels'
+  train: 'H:\Deepsync\backup\development\data\wavs'
+  validation: 'H:\Deepsync\backup\development\data\valid'
+  mel_path: 'H:\Deepsync\backup\development\FastSpeech2\data\LJSpeech\good_file\mels'
 ---
 train:
   rep_discriminator: 1
@@ -10,7 +10,7 @@ train:
   batch_size: 16
   optimizer: 'adam'
   adam:
-    lr: 0.0001
+    lr: 0.00002
     beta1: 0.5
     beta2: 0.9
 ---
@@ -28,6 +28,7 @@ audio:
 model:
   feat_match: 10.0
   lambda_adv: 2.5
+  lambda_time_loss: 20
   use_subband_stft_loss: False
   feat_loss: False
   out_channels: 1
@@ -39,7 +40,12 @@ model:
   n_layers: 3
   downsampling_factor: 4
   disc_out: 512
-  
+
+time_loss_params:
+  win_lengths: [1, 240, 480, 960]
+  hop_sizes: [1, 120, 240, 480]
+  window: "hann_window"
+
 stft_loss_params:
     fft_sizes: [1024, 2048, 512]  # List of FFT size for STFT-based loss.
     hop_sizes: [120, 240, 50]     # List of hop size for STFT-based loss

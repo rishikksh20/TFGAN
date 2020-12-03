@@ -138,11 +138,12 @@ class FrequencyDiscriminator(nn.Module):
         self.resnet_disc = ResNet18Discriminator(self.stft_channel, in_channel)
 
     def forward(self, x):
-        x_stft = torch.stft(x, self.fft_size, self.hop_length, self.win_length, self.window)
+        print("shape of x", x.device)
+        x_stft = torch.stft(x, self.fft_size, self.hop_length, self.win_length, self.window.cuda())
         real = x_stft[..., 0]
         imag = x_stft[..., 1]
 
         x_real = self.resnet_disc(real)
         x_imag = self.resnet_disc(imag)
 
-        return x_real, x_imag
+        return torch.sqrt(torch.clamp(x_real ** 2 + x_imag ** 2, min=1e-7)).transpose(2, 1)

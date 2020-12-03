@@ -9,20 +9,23 @@ from model.multiscale import MultiScaleDiscriminator
 from .utils import get_commit_hash
 from .validation import validate
 from utils.stft_loss import MultiResolutionSTFTLoss
-
+from utils.timeloss import TimeDomainLoss_v1
+from model.freq_discriminator import FrequencyDiscriminator
 
 def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, hp_str):
     model_g = Generator(hp.audio.n_mel_channels, hp.model.n_residual_layers,
                         ratios=hp.model.generator_ratio, mult = hp.model.mult,
                         out_band = hp.model.out_channels).cuda()
-    print("Generator : \n",model_g)
+    #print("Generator : \n",model_g)
 
     model_d = MultiScaleDiscriminator(hp.model.num_D, hp.model.ndf, hp.model.n_layers,
                                       hp.model.downsampling_factor, hp.model.disc_out).cuda()
-    print("Discriminator : \n", model_d)
+    model_f = FrequencyDiscriminator().cuda()
+
+    #print("Discriminator : \n", model_d)
     optim_g = torch.optim.Adam(model_g.parameters(),
         lr=hp.train.adam.lr, betas=(hp.train.adam.beta1, hp.train.adam.beta2))
-    optim_d = torch.optim.Adam(model_d.parameters(),
+    optim_d = torch.optim.Adam(itertools.chain(model_d.parameters(), model_f.parameters()),
         lr=hp.train.adam.lr, betas=(hp.train.adam.beta1, hp.train.adam.beta2))
 
     githash = get_commit_hash()
@@ -36,6 +39,7 @@ def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, 
         checkpoint = torch.load(chkpt_path)
         model_g.load_state_dict(checkpoint['model_g'])
         model_d.load_state_dict(checkpoint['model_d'])
+        model_f.load_state_dict(checkpoint['model_f'])
         optim_g.load_state_dict(checkpoint['optim_g'])
         optim_d.load_state_dict(checkpoint['optim_d'])
         step = checkpoint['step']
@@ -60,11 +64,15 @@ def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, 
         model_d.train()
         stft_loss = MultiResolutionSTFTLoss()
         criterion = torch.nn.MSELoss().cuda()
+        time_loss = TimeDomainLoss_v1(hp.train.batch_size, hp.audio.segment_length, hp.time_loss_params.win_lengths,
+                                      hp.time_loss_params.hop_sizes)
+        time_loss_valid = TimeDomainLoss_v1(1, hp.audio.segment_length, hp.time_loss_params.win_lengths,
+                                      hp.time_loss_params.hop_sizes)
 
         for epoch in itertools.count(init_epoch+1):
             if epoch % hp.log.validation_interval == 0:
                 with torch.no_grad():
-                    validate(hp, model_g, model_d, valloader, stft_loss, criterion, pqmf, writer, step)
+                    validate(hp, model_g, model_d, model_f, valloader, stft_loss, time_loss_valid, criterion, writer, step)
 
             trainloader.dataset.shuffle_mapping()
             loader = tqdm.tqdm(trainloader, desc='Loading train data')
@@ -91,20 +99,28 @@ def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, 
                 sc_loss, mag_loss = stft_loss(fake_audio[:, :, :audioG.size(2)].squeeze(1), audioG.squeeze(1))
                 loss_g = sc_loss + mag_loss
 
+                # Time Domain loss
+                loss_g += hp.model.lambda_time_loss * time_loss(audioG.squeeze(1), fake_audio[:, :, :audioG.size(2)].squeeze(1))
+
                 adv_loss = 0.0
                 if step > hp.train.discriminator_train_start_steps:
-                    disc_real = model_d(audioG)
-                    disc_fake = model_d(fake_audio)
-                    # for multi-scale discriminator
 
-                    for feats_fake, score_fake in disc_fake:
+                    disc_fake_g = model_d(fake_audio)
+                    # for multi-scale Time discriminator
+
+                    for feats_fake, score_fake in disc_fake_g:
                         # adv_loss += torch.mean(torch.sum(torch.pow(score_fake - 1.0, 2), dim=[1, 2]))
                         adv_loss += criterion(score_fake, torch.ones_like(score_fake))
-                    adv_loss = adv_loss / len(disc_fake) # len(disc_fake) = 3
+                    adv_loss = adv_loss / len(disc_fake_g) # len(disc_fake) = 3
+
+                    # For Frequency Discriminator
+                    disc_fake_freq_g = model_f(fake_audio.squeeze(1))
+                    adv_loss += criterion(disc_fake_freq_g, torch.ones_like(disc_fake_freq_g))
 
 
 
                     if hp.model.feat_loss :
+                        disc_real = model_d(audioG)
                         for (feats_fake, score_fake), (feats_real, _) in zip(disc_fake, disc_real):
                             for feat_f, feat_r in zip(feats_fake, feats_real):
                                 adv_loss += hp.model.feat_match * torch.mean(torch.abs(feat_f - feat_r))
@@ -124,6 +140,8 @@ def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, 
                     loss_d_sum = 0.0
                     for _ in range(hp.train.rep_discriminator):
                         optim_d.zero_grad()
+
+                        # Time Domain Discriminator
                         disc_fake = model_d(fake_audio)
                         disc_real = model_d(audioD)
                         loss_d = 0.0
@@ -134,7 +152,15 @@ def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, 
                             loss_d_fake += criterion(score_fake, torch.zeros_like(score_fake))
                         loss_d_real = loss_d_real / len(disc_real) # len(disc_real) = 3
                         loss_d_fake = loss_d_fake / len(disc_fake) # len(disc_fake) = 3
-                        loss_d = loss_d_real + loss_d_fake
+
+                        # Frequency Discriminator
+                        disc_fake_freq = model_f(fake_audio.squeeze(1))
+                        loss_d_fake_freq = criterion(disc_fake_freq, torch.zeros_like(disc_fake_freq))
+
+                        disc_real_freq = model_f(audioD.squeeze(1))
+                        loss_d_real_freq = criterion(disc_real_freq, torch.ones_like(disc_real_freq))
+
+                        loss_d = loss_d_real + loss_d_fake + loss_d_fake_freq + loss_d_real_freq
                         loss_d.backward()
                         optim_d.step()
                         loss_d_sum += loss_d
@@ -164,6 +190,7 @@ def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, 
                 torch.save({
                     'model_g': model_g.state_dict(),
                     'model_d': model_d.state_dict(),
+                    'model_f': model_f.state_dict(),
                     'optim_g': optim_g.state_dict(),
                     'optim_d': optim_d.state_dict(),
                     'step': step,
