@@ -1,4 +1,4 @@
-# TFGAN [WIP]
+# TFGAN
 
 This repo is Unofficial implements of [TFGAN: Time and Frequency Domain Based Generative Adversarial Network for High-fidelity Speech Synthesis](https://arxiv.org/abs/2011.12206) using Pytorch.
 ![](./assets/model.PNG)
@@ -26,3 +26,6 @@ pip install -r requirements.txt
 ## Inference
 
 - `python inference.py -p [checkpoint path] -i [input mel path]`
+
+## Checkpoint :
+- LJSpeech checkpoint [here](https://drive.google.com/drive/folders/1QWAKled8HKLDWbHTRcBMpW5HQ_svXY5j?usp=sharing) .
