@@ -10,7 +10,7 @@ train:
   batch_size: 16
   optimizer: 'adam'
   adam:
-    lr: 0.00002
+    lr: 0.0002
     beta1: 0.5
     beta2: 0.9
 ---
