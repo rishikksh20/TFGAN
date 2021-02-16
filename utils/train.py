@@ -121,7 +121,7 @@ def train(args, pt_dir, chkpt_path, trainloader, valloader, writer, logger, hp, 
 
                     if hp.model.feat_loss :
                         disc_real = model_d(audioG)
-                        for (feats_fake, score_fake), (feats_real, _) in zip(disc_fake, disc_real):
+                        for (feats_fake, score_fake), (feats_real, _) in zip(disc_fake_g, disc_real):
                             for feat_f, feat_r in zip(feats_fake, feats_real):
                                 adv_loss += hp.model.feat_match * torch.mean(torch.abs(feat_f - feat_r))
 
